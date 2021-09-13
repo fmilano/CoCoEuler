@@ -14,4 +14,5 @@ EULER.DSK: Euler1.bin
 all: Euler1.bin
 	
 clean:
-	rm *.bin
+	rm -f *.bin
+	rm -f *.DSK
