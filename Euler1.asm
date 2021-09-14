@@ -18,7 +18,7 @@ Start		ldx	#FirstNum
 		jsr	ConvInt24ToStr
 		rts			; back to Basic
 
-FirstNum	fcb	$1B,$36,$4D	; 24 bit number
+FirstNum	fcb	$0D,$10,$5A	; 24 bit number
 SecondNum	fcb	$00,$10,$02
 Result		fcb	0,0,0,0,0
 
@@ -27,7 +27,7 @@ Result		fcb	0,0,0,0,0
 * Purpose: MultiPrecAdd adds two multi-byte binary numbers
 *
 * Input: 
-* 	Least Significant Byte (LSB) of numbers starting addresses in index X and Y.
+* 	Least Significant Byte (LSB, little endian) of numbers starting addresses in index X and Y.
 *	Length of numbers in bytes in B.
 * Output: 
 *	LSB of result starting address in index U. 
@@ -66,26 +66,34 @@ SubByte		lda	,X+		; get byte from first number
 *
 * Input: 
 * 	Least Significant Byte (LSB) of number starting addresses in index X.
+* Output:
 *	First ASCII character of result starting address in index U.
-*	Length of number in bytes in B.
-* Output
 *
-* Registers affected: B, X, Y, U, CC (flags)
+* Registers affected: A, B, X, Y, U, CC (flags)
 ConvInt24ToStr	ldy	#TempConv
-		lda	,X+
+		ldb	#3		;copy the value to convert
+loop1		lda	,X+	
 		sta	,Y+
-		lda	,X+
-		sta	,Y+
-		lda	,X+
-		sta	,Y+
+		decb
+		bne	loop1
+
+		ldb	#6		;initialize local variables
+		stb	Digits
+		ldb	#0
+		stb	OutputOffset
+		stb	TableOffset
+
+convdigit	ldb	#0		;convert digit
+		stb	Count
+		ldb	TableOffset
+		ldx	#TableExp10
+		leay	B,X
+		sty	TablePtr		
 		ldx	#TempConv
 		ldu	#TempConv
-		ldb	#3
-		ldy	#TableExp10
-		lda	#0
-		sta	Count
-Sub1		jsr	MultiPrecSub
-		bcs	AddBack
+		ldb	#3	
+sub1		jsr	MultiPrecSub
+		bcs	addBack
 		lda	Count
 		inca
 		sta	Count
@@ -93,21 +101,48 @@ Sub1		jsr	MultiPrecSub
 		ldx	#TempConv
 		ldu	#TempConv
 		ldb	#3
-		ldy	#TableExp10
-		bra	Sub1
+		ldy	TablePtr
+		bra	sub1
 
-AddBack		ldx	#TempConv
+addBack		ldx	#TempConv
 		ldu	#TempConv
 		ldb	#3
-		ldy	#TableExp10
-		jsr	MultiPrecSub
+		ldy	TablePtr
+		jsr	MultiPrecAdd
+		
+		lda	#3
+		adda	TableOffset
+		sta	TableOffset
+		
+		lda	#$30
+		adda	Count
+		ldx	#OutputStr
+		ldb	OutputOffset
+		sta	B,X
+		incb
+		stb	OutputOffset
+		cmpb	#6
+		bne	convdigit
+		
+		lda	#$30
+		adda	TempConv
+		sta	B,X
+		ldu	#OutputStr
 		rts
-Count		fcb	0
-TempConv	fcb	0,0,0	
+Digits		fcb	0	;number of digits (5)
+Count		fcb	0	;count for current digit
+TempConv	fcb	0,0,0	;value to convert
+OutputOffset	fcb	0	;digit being converted
+
+OutputStr	fcb	0,0,0,0,0,0,0,0	;output string
+
+TableOffset	fcb	0	;offset in conversion table
+TablePtr	fdb	0
+
 TableExp10	fcb	$40,$42,$0F # Exp10(6) = 1000000
 		fcb	$A0,$86,$01 # Exp10(5) =  100000
-		fcb	$A0,$86,$01 # Exp10(4) =   10000
-		fcb	$A0,$86,$01 # Exp10(3) =    1000
-		fcb	$A0,$86,$01 # Exp10(2) =     100
-		fcb	$A0,$86,$01 # Exp10(1) =      10
+		fcb	$10,$27,$00 # Exp10(4) =   10000
+		fcb	$E8,$03,$00 # Exp10(3) =    1000
+		fcb	$64,$00,$00 # Exp10(2) =     100
+		fcb	$0A,$0,$00 # Exp10(1) =      10
 		end	Start		; exec address
