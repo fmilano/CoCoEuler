@@ -5,7 +5,6 @@
         TTL	Project Euler problem 1
         OPT	NOG
 
-GETCHR		equ	$A000		; GET 1 Char jsr[GETCHR]
 PUTLIN		equ	$B99C		; PUT A LINE	Msg in X-1
 PUTCR		equ	$B958		; Put CR $0D
 
@@ -15,12 +14,22 @@ Start		ldx	#FirstNum
 		ldy	#SecondNum
 		ldu	#Result
 		ldb	#3
+
+		ldx	#FirstNum
+		ldy	#ResultStr
 		jsr	ConvInt24ToStr
+
+		ldx	#ResultStr-1	; Basic needs -1 
+		jsr	PUTLIN		; Print to screen
+		jsr	PUTCR		; Carriage Return
 		rts			; back to Basic
 
 FirstNum	fcb	$0D,$10,$5A	; 24 bit number
 SecondNum	fcb	$00,$10,$02
 Result		fcb	0,0,0,0,0
+
+ResultStr	fcn	"0000000"	; place to store the number as a string string
+
 
 * Subroutine MultiPrecAdd
 *
@@ -66,11 +75,15 @@ SubByte		lda	,X+		; get byte from first number
 *
 * Input: 
 * 	Least Significant Byte (LSB) of number starting addresses in index X.
+*	Address to write the string (7 characters positions) on register Y. 
 * Output:
 *	First ASCII character of result starting address in index U.
 *
+* A 24 bit number occupies a maximum of 7 decimal digits.
+*
 * Registers affected: A, B, X, Y, U, CC (flags)
-ConvInt24ToStr	ldy	#TempConv
+ConvInt24ToStr	sty	OutputPtr
+		ldy	#TempConv
 		ldb	#3		;copy the value to convert
 loop1		lda	,X+	
 		sta	,Y+
@@ -116,7 +129,7 @@ addBack		ldx	#TempConv
 		
 		lda	#$30
 		adda	Count
-		ldx	#OutputStr
+		ldx	OutputPtr
 		ldb	OutputOffset
 		sta	B,X
 		incb
@@ -124,17 +137,17 @@ addBack		ldx	#TempConv
 		cmpb	#6
 		bne	convdigit
 		
-		lda	#$30
+		lda	#$30		; convert the unit
 		adda	TempConv
 		sta	B,X
-		ldu	#OutputStr
+		ldu	OutputPtr
 		rts
 Digits		fcb	0	;number of digits (5)
 Count		fcb	0	;count for current digit
 TempConv	fcb	0,0,0	;value to convert
 OutputOffset	fcb	0	;digit being converted
 
-OutputStr	fcb	0,0,0,0,0,0,0,0	;output string
+OutputPtr	fdb	0	;output string
 
 TableOffset	fcb	0	;offset in conversion table
 TablePtr	fdb	0
