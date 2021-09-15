@@ -71,15 +71,14 @@ SubByte		lda	,X+		; get byte from first number
 
 * Subroutine ConvInt24ToStr
 *
-* Purpose: ConvInt24ToStr converts a multi-byte binary number to a string
+* Purpose: ConvInt24ToStr converts a 24-bit binary number to a string of ASCII decimal digits.
+* 	   The conversion is an "unsigned" conversion of the 24-bit value.
 *
 * Input: 
-* 	Least Significant Byte (LSB) of number starting addresses in index X.
-*	Address to write the string (7 characters positions) on register Y. 
-* Output:
-*	First ASCII character of result starting address in index U.
+* 	Register X: hold the address of the 3 bytes (24-bit) number to be converted, in little-endian representation.
+*	Register Y: hold the address of the 7 byte buffer that will hold the result. 
 *
-* A 24 bit number occupies a maximum of 7 decimal digits.
+* Observation: A 24 bit number occupies a maximum of 7 decimal digits.
 *
 * Registers affected: A, B, X, Y, U, CC (flags)
 ConvInt24ToStr	sty	OutputPtr
