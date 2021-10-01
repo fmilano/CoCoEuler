@@ -1,160 +1,183 @@
-*
-*       Euler1.asm  -- Solution to Project Euler problem 1
-*
+;
+;       Euler1.asm  -- Solution to Project Euler problem 1
+;
+; 	Find the sum of all the multiples of 3 or 5 below 1000.
         NAM	Euler1.asm
         TTL	Project Euler problem 1
         OPT	NOG
 
-PUTLIN		equ	$B99C		; PUT A LINE	Msg in X-1
-PUTCR		equ	$B958		; Put CR $0D
+PUTLIN		EQU	$B99C		; PUT A LINE	Msg in X-1
+PUTCR		EQU	$B958		; Put CR $0D
 
-		org	$1000		; load address
+                ORG	$1000		; load address
 
-Start		ldx	#FirstNum
-		ldy	#SecondNum
-		ldu	#Result
-		ldb	#3
+Start	        LDY	#999		; Get initial dividend
+                PSHS    Y               ; Save counter
+div_by_3        LDX	#3		; GET DIVISOR
+                PSHS	X,Y		; SAVE PARAMETERS IN STACK
+                JSR	UREM16		; UNSIGNED DIVIDE, RETURN REMAINDER 
+                PULS	D		; GET remainder
+                TSTB                    ; is divisible?
+                BNE     div_by_5        ; no
+                                        ; yes, add to the accumulator
+                LDD     ,S              
+                LDX     #accum
+                JSR     Add24           ; Add 
+                BRA     next_number
+                
+div_by_5        LDY     ,S              
+                LDX	#5		; GET DIVISOR
+                PSHS	X,Y		; SAVE PARAMETERS IN STACK
+                JSR	UREM16		; UNSIGNED DIVIDE, RETURN REMAINDER 
+                PULS	D		; GET remainder
+                TSTB                    ; is divisible?
+                BNE     next_number     ; no
+                ; Add multiple
+                LDD     ,S              
+                LDX     #accum
+                JSR     Add24           ; Add 
+next_number     LDY     ,S
+                LEAY    -1,Y
+                BEQ     finish
+                STY     ,S
+                BRA     div_by_3
+        
+finish          PULS    Y
+                ;LDY	#resultStr
+                ;JSR	ConvInt24ToStr
 
-		ldx	#FirstNum
-		ldy	#ResultStr
-		jsr	ConvInt24ToStr
+               ; LDX	#resultStr-1	; Basic needs -1 
+               ; JSR	PUTLIN		; Print to screen
+               ; JSR	PUTCR		; Carriage Return
+                RTS			; back to Basic
 
-		ldx	#ResultStr-1	; Basic needs -1 
-		jsr	PUTLIN		; Print to screen
-		jsr	PUTCR		; Carriage Return
-		rts			; back to Basic
+;
+; Data
+;
+accum		ZMB	3	; 24 bit number accumulated result
 
-FirstNum	fcb	$0D,$10,$5A	; 24 bit number
-SecondNum	fcb	$00,$10,$02
-Result		fcb	0,0,0,0,0
-
-ResultStr	fcn	"0000000"	; place to store the number as a string string
+resultStr	FCN	"0000000"	; place to store the number as a string string
 
 
-* Subroutine MultiPrecAdd
+;	Title:			16-bit division	
+;
+;	Name:			SDIV16, UDIV16, SREM16, UREM16
+;	Purpose:
+;				UREM16	Divide 2 unsigned 16-bit words and return a 16-bit unsigned remainder
+;
+;	Entry:
+;
+;				TOP OF STACK 
+;				High byte of return address 
+;				Low  byte of return address 
+;				High byte of divisor 
+;				Low  byte of divisor 
+;				High byte of dividend 
+;				Low  byte of dividend
+;
+;	Exit:
+;
+;				TOP OF STACK 
+;				High byte of result 
+;				Low  byte of result
+;
+;	If no errors then 
+;		Carry		:= 0
+;	else
+;		divide by zero error
+;		Carry		:= 1 
+;		quotient	:= 0 
+;		remainder	:= 0
+;
+;	Registers Used:		A,B,CC,X,Y
+;
+;	Time:			Approximately 955 cycles
+;
+;	Size:
+;				Program	145 bytes
+;				Data	  3 stack bytes
+; 
+; UNSIGNED 16-BIT DIVISION, RETURNS REMAINDER
+;
+UREM16:
+; UNSIGNED DIVISION, INDICATE QUOTIENT, REMAINDER BOTH POSITIVE
+; 
+; CHECK FOR ZERO DIVISOR
+; EXIT, INDICATING ERROR, IF FOUND
+; 
+        LEAX	2,S		; POINT TO DIVISOR 
+        LDD	 ,X		; TEST DIVISOR
+        BNE	STRTDV		; BRANCH IF DIVISOR NOT ZERO
+        STD	2,X		; DIVISOR IS ZERO, SO MAKE RESULT ZERO 
+;--	SEC			; INDICATE DIVIDE BY ZERO ERROR
+        BRA	EXITDV		; EXIT INDICATING ERROR
+;
+; DIVIDE UNSIGNED DIVIDEND BY UNSIGNED DIVISOR 
+; MEMORY ADDRESSES HOLD BOTH DIVIDEND AND QUOTIENT.
+; EACH TIME WE SHIFT THE DIVIDEND ONE BIT LEFT,
+; WE ALSO SHIFT A BIT OF THE
+; QUOTIENT IN FROM THE CARRY AT THE FAR RIGHT
+; AT THE END, THE QUOTIENT HAS REPLACED THE DIVIDEND IN MEMORY
+; AND THE REMAINDER IS LEFT IN REGISTER D
+; 
+STRTDV: LDD	#0		; EXTEND DIVIDEND TO 32 BITS WITH 0 
+        LDY	#16		; BIT COUNT = 16 
+;
+; SHIFT DIVIDEND LEFT WITH ENTERING AT FAR RIGHT 
+; 
+DIV16:
+        ROL	3,X		; SHIFT LOW  BYTE OF DIVIDEND 
+        ROL	2,X		; SHIFT NEXT BYTE OF DIVIDEND 
+        ROLB			; SHIFT NEXT BYTE OF DIVIDEND 
+        ROLA			; SHIFT HIGH BYTE OF DIVIDEND
+; 
+; DO A TRIAL SUBTRACTION OF DIVISOR FROM DIVIDEND
+; IF DIFFERENCE IS NON-NEGATIVE, PERFORM ACTUAL SUBTRACTION.
+; IF DIFFERENCE IS NEGATIVE, continue.
+;
+        CMPD	,X		; TRIAL SUBTRACTION OF DIVISOR
+        BCS	DECCNT		; BRANCH IF SUBTRACTION FAILS
+        SUBD	,X		; TRIAL SUBTRACTION SUCCEEDED,
+                                ; SO SUBTRACT DIVISOR FROM
+                                ; DIVIDEND
+; 
+; UPDATE BIT COUNTER
+; CONTINUE THROUGH 16 BITS
+; 
+DECCNT: LEAY	-1,Y		; CONTINUE UNTIL ALL BITS DONE 
+        BNE	DIV16
+; 
+; SAVE REMAINDER IN STACK
+; 
+        STD	4,S
+; REMOVE PARAMETERS FROM STACK AND EXIT
+; 
+EXITDV:	LDX	 ,S		; SAVE RETURN ADDRESS 
+        LEAS	4,S		; REMOVE PARAMETERS FROM STACK 
+        JMP	,X		; EXIT TO RETURN ADDRESS
+
+* Subroutine Add24
 *
 * Purpose: MultiPrecAdd adds two multi-byte binary numbers
 *
 * Input: 
-* 	Least Significant Byte (LSB, little endian) of numbers starting addresses in index X and Y.
-*	Length of numbers in bytes in B.
+* 	16bit number in D.
+*	Pointer to 24bit number in X.
 * Output: 
-*	LSB of result starting address in index U. 
+*	24 bit number in X. 
 *
 * Registers affected: A, B, X, Y, U, CC (flags)
-MultiPrecAdd	andcc	#%11111110	; clear carry
-AddByte		lda	,X+		; get byte from first number
-		adca	,Y+		; A = A + byte from second number + carry
-		sta	,U+		; store result
-		decb			; all bytes added?
-		bne	AddByte
-		rts
+Add24   	ANDCC	#%11111110	; clear carry
 
-* Subroutine MultiPrecSub
-*
-* Purpose: MultiPrecSub substracts two multi-byte binary numbers
-*
-* Input: 
-* 	Least Significant Byte (LSB) of numbers starting addresses in index X and Y.
-*	Length of numbers in bytes in B.
-* Output: 
-*	LSB of result (X - Y) starting address in index U. 
-*
-* Registers affected: A, B, X, Y, U, CC (flags)
-MultiPrecSub	andcc	#%11111110	; clear carry
-SubByte		lda	,X+		; get byte from first number
-		sbca	,Y+		; A = A - byte from second number + carry
-		sta	,U+		; store result
-		decb			; all bytes added?
-		bne	SubByte
-		rts
+                ADCB	2,X		; A = A + byte from second number + carry
+                STB	2,X		; store result
 
-* Subroutine ConvInt24ToStr
-*
-* Purpose: ConvInt24ToStr converts a 24-bit binary number to a string of ASCII decimal digits.
-* 	   The conversion is an "unsigned" conversion of the 24-bit value.
-*
-* Input: 
-* 	Register X: hold the address of the 3 bytes (24-bit) number to be converted, in little-endian representation.
-*	Register Y: hold the address of the 7 byte buffer that will hold the result. 
-*
-* Observation: A 24 bit number occupies a maximum of 7 decimal digits.
-*
-* Registers affected: A, B, X, Y, U, CC (flags)
-ConvInt24ToStr	sty	OutputPtr
-		ldy	#TempConv
-		ldb	#3		;copy the value to convert
-loop1		lda	,X+	
-		sta	,Y+
-		decb
-		bne	loop1
+                ADCA	1,X		; A = A + byte from second number + carry
+                STA	1,X		; store result
 
-		ldb	#6		;initialize local variables
-		stb	Digits
-		ldb	#0
-		stb	OutputOffset
-		stb	TableOffset
+                LDA     #0
+                ADCA	,X		; A = A + byte from second number + carry
+                STA	,X		; store result
+                RTS
 
-convdigit	ldb	#0		;convert digit
-		stb	Count
-		ldb	TableOffset
-		ldx	#TableExp10
-		leay	B,X
-		sty	TablePtr		
-		ldx	#TempConv
-		ldu	#TempConv
-		ldb	#3	
-sub1		jsr	MultiPrecSub
-		bcs	addBack
-		lda	Count
-		inca
-		sta	Count
-		
-		ldx	#TempConv
-		ldu	#TempConv
-		ldb	#3
-		ldy	TablePtr
-		bra	sub1
-
-addBack		ldx	#TempConv
-		ldu	#TempConv
-		ldb	#3
-		ldy	TablePtr
-		jsr	MultiPrecAdd
-		
-		lda	#3
-		adda	TableOffset
-		sta	TableOffset
-		
-		lda	#$30
-		adda	Count
-		ldx	OutputPtr
-		ldb	OutputOffset
-		sta	B,X
-		incb
-		stb	OutputOffset
-		cmpb	#6
-		bne	convdigit
-		
-		lda	#$30		; convert the unit
-		adda	TempConv
-		sta	B,X
-		ldu	OutputPtr
-		rts
-Digits		fcb	0	;number of digits (5)
-Count		fcb	0	;count for current digit
-TempConv	fcb	0,0,0	;value to convert
-OutputOffset	fcb	0	;digit being converted
-
-OutputPtr	fdb	0	;output string
-
-TableOffset	fcb	0	;offset in conversion table
-TablePtr	fdb	0
-
-TableExp10	fcb	$40,$42,$0F # Exp10(6) = 1000000
-		fcb	$A0,$86,$01 # Exp10(5) =  100000
-		fcb	$10,$27,$00 # Exp10(4) =   10000
-		fcb	$E8,$03,$00 # Exp10(3) =    1000
-		fcb	$64,$00,$00 # Exp10(2) =     100
-		fcb	$0A,$0,$00 # Exp10(1) =      10
-		end	Start		; exec address
+                END     Start
