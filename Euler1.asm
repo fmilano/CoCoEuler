@@ -141,7 +141,7 @@ deccnt          LEAY    -1,Y            ; continue until all bits done
 ; remove parameters from stack and exit
 ; 
 exitdv          LDX     ,S      ; save return address 
-                LEAS    4,S      ; remove parameters from stack 
+                LEAS    4,S     ; remove parameters from stack 
                 JMP     ,X      ; exit to return address
 
 
@@ -237,41 +237,49 @@ SUB24:          ANDCC   #%11111110      ; clear carry
 ;       Exit:
 ;            Register Y = Pointer to ASCII string 
 ;
+; Stack:
+;       24 bit temp (3 bytes): 0
+;       Count (1 byte)       : 3
+;       Digits (1 byte)      : 4
+;
+;
 CONV_INT24_STR: STY     OutputPtr
-                LDY     #TempConv
-                LDB     #3              ; copy the value to convert
-loop1           LDA     ,X+   
+                
+                LEAS    -5,S            ; reserves space for copy of number 
+                LEAY    ,S
+                LDB     #3              ; prepares for copy
+loop1           LDA     ,X+             ; copy the value to convert
                 STA     ,Y+
                 DECB
                 BNE     loop1
 
                 LDB     #6              ; initialize local variables
-                STB     Digits
+                STB     3,S
                 LDB     #0
                 STB     OutputOffset
                 STB     TableOffset
 
 convdigit       LDB     #0              ; convert digit
-                STB     Count
+                STB     4,S
                 LDB     TableOffset
                 LDX     #TableExp10
                 LEAY    B,X
                 STY     TablePtr      
-                LDX     #TempConv
-                LDU     #TempConv
+                LEAX    ,S
+                LEAU    ,S
 sub1            JSR     SUB24
                 BCS     addBack
-                LDA     Count
+                LDA     4,S
                 INCA
-                STA     Count
+                STA     4,S
                 
-                LDX     #TempConv
-                LDU     #TempConv
+                LEAX    ,S
+                LEAU    ,S
                 LDY     TablePtr
                 BRA     sub1
 
-addBack         LDX     #TempConv
-                LDU     #TempConv
+addBack         LEAX    ,S
+                LEAU    ,S
                 LDY     TablePtr
                 JSR     ADD24
                 
@@ -280,7 +288,7 @@ addBack         LDX     #TempConv
                 STA     TableOffset
                 
                 LDA     #$30
-                ADDA    Count
+                ADDA    4,S
                 LDX     OutputPtr
                 LDB     OutputOffset
                 STA     B,X
@@ -290,18 +298,16 @@ addBack         LDX     #TempConv
                 BNE     convdigit
                 
                 LDA     #$30            ; convert the unit
-                LDY     #TempConv
+                LEAY    ,S
                 ADDA    2,Y
                 STA     B,X
                 LDY     OutputPtr
+                LEAS    5,S
                 RTS
 
 ;
 ; CONV_INT24_STR DATA
 ;
-Digits          FCB     0               ; number of digits (5)
-Count           FCB     0               ; count for current digit
-TempConv        FCB     0,0,0           ; value to convert
 OutputOffset    FCB     0               ; digit being converted
 
 OutputPtr       FDB     0               ; output string address
