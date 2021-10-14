@@ -54,7 +54,7 @@ finish          LDX     #accum
 ;
 accum      ZMB   3   ; 24 bit number accumulated result
 
-result_str   FCN   "0000000"   ; place to store the number as a string string
+result_str   FCN   "00000000"   ; place to store the number as a string string
 
 
 ;       Name:           UREM16
@@ -182,6 +182,9 @@ ADD16_24:       ANDCC   #%11111110   ; clear carry
 ;       Exit:
 ;               Register U = Pointer to 24-bit result 
 ;
+;       Affected registers:
+;               A,X,Y,U,CC
+;
 ADD24:          ANDCC   #%11111110      ; clear carry
 
                 LDA     2,X
@@ -207,7 +210,10 @@ ADD24:          ANDCC   #%11111110      ; clear carry
 ;               Register Y = Pointer to 24-bit number (substraend)
 ;
 ;       Exit:
-;               Register Y = Pointer to 24-bit result 
+;               Register Y = Pointer to 24-bit result
+;
+;       Affected registers:
+;               A,X,Y,U,CC
 ;
 SUB24:          ANDCC   #%11111110      ; clear carry
 
@@ -232,20 +238,23 @@ SUB24:          ANDCC   #%11111110      ; clear carry
 ;       Entry:
 ;
 ;            Register X = Pointer to 24-bit number 
-;            Register Y = Pointer destination memory space for ASCII string
+;            Register Y = Pointer to destination buffer of 8 bytes for ASCII string 
 ;
 ;       Exit:
-;            Register Y = Pointer to ASCII string 
+;            
 ;
 ; Stack:
 ;       24 bit temp (3 bytes): 0
 ;       Count (1 byte)       : 3
-;       Digits (1 byte)      : 4
+;       TablePtr   (2 bytes) : 4
+;       OutputPtr (2 bytes)  : 6
 ;
 ;
-CONV_INT24_STR: STY     OutputPtr
-                
-                LEAS    -5,S            ; reserves space for copy of number 
+;
+CONV_INT24_STR: LEAS    -8,S            ; reserves space for copy of number
+                STY     6,S             ; saves ptr to output buffer
+                LDY     #table_exp10
+                STY     4,S 
                 LEAY    ,S
                 LDB     #3              ; prepares for copy
 loop1           LDA     ,X+             ; copy the value to convert
@@ -253,73 +262,55 @@ loop1           LDA     ,X+             ; copy the value to convert
                 DECB
                 BNE     loop1
 
-                LDB     #6              ; initialize local variables
+                LDB     #0              ; initialize local variables
                 STB     3,S
-                LDB     #0
-                STB     OutputOffset
-                STB     TableOffset
-
-convdigit       LDB     #0              ; convert digit
-                STB     4,S
-                LDB     TableOffset
-                LDX     #TableExp10
-                LEAY    B,X
-                STY     TablePtr      
-                LEAX    ,S
-                LEAU    ,S
-sub1            JSR     SUB24
-                BCS     addBack
-                LDA     4,S
-                INCA
-                STA     4,S
                 
+convdigit       LDB     #0              ; in B we will store the digit count
                 LEAX    ,S
+                LDY     4,S
                 LEAU    ,S
-                LDY     TablePtr
+sub1            JSR     SUB24           ; do a trial substraction
+                BCS     add_back        ; if it is negative, roll back the substraction
+                INCB                    
                 BRA     sub1
 
-addBack         LEAX    ,S
-                LEAU    ,S
-                LDY     TablePtr
-                JSR     ADD24
-                
-                LDA     #3
-                ADDA    TableOffset
-                STA     TableOffset
+add_back        JSR     ADD24
+                STB     [6,S]           ; convert to ascii
                 
                 LDA     #$30
-                ADDA    4,S
-                LDX     OutputPtr
-                LDB     OutputOffset
-                STA     B,X
+                ADDA    [6,S]
+                STA     [6,S]
+
+                LDX     6,S             ; point to next output character
+                LEAX    1,X
+                STX     6,S
+
+                LDX     4,S             ; point to next output character
+                LEAX    3,X
+                STX     4,S
+
+                LDB     3,S             ; inc counter
                 INCB
-                STB     OutputOffset
-                CMPB    #6
+                STB     3,S
+                CMPB    #7              ; converts in total 8 digits
                 BNE     convdigit
                 
                 LDA     #$30            ; convert the unit
-                LEAY    ,S
-                ADDA    2,Y
-                STA     B,X
-                LDY     OutputPtr
-                LEAS    5,S
+                LEAX    ,S
+                ADDA    2,X
+                STA     [6,S]
+                LEAS    8,S
                 RTS
 
 ;
 ; CONV_INT24_STR DATA
 ;
-OutputOffset    FCB     0               ; digit being converted
-
-OutputPtr       FDB     0               ; output string address
-
-TableOffset     FCB     0               ; offset in conversion table
-TablePtr        FDB     0
-
-TableExp10      FCB     $0F,$42,$40     ; exp10(6) = 1000000
-                FCB     $01,$86,$A0     ; exp10(5) =  100000
-                FCB     $00,$27,$10     ; exp10(4) =   10000
-                FCB     $00,$03,$E8     ; exp10(3) =    1000
-                FCB     $00,$00,$64     ; exp10(2) =     100
-                FCB     $00,$0,$0A      ; exp10(1) =      10
+table_exp10     FCB     $98,$96,$80     ; exp10(7) = 10000000
+                FCB     $0F,$42,$40     ; exp10(6) =  1000000
+                FCB     $01,$86,$A0     ; exp10(5) =   100000
+                FCB     $00,$27,$10     ; exp10(4) =    10000
+                FCB     $00,$03,$E8     ; exp10(3) =     1000
+                FCB     $00,$00,$64     ; exp10(2) =      100
+                FCB     $00,$0,$0A      ; exp10(1) =       10
 
                 END     Start
