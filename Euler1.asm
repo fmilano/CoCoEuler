@@ -186,6 +186,7 @@ ADD16_24:       ANDCC   #%11111110   ; clear carry
 ;               A,X,Y,U,CC
 ;
 ADD24:          ANDCC   #%11111110      ; clear carry
+                PSHS    A
 
                 LDA     2,X
                 ADCA    2,Y             ; A = A + byte from second number + carry
@@ -198,6 +199,8 @@ ADD24:          ANDCC   #%11111110      ; clear carry
                 LDA     ,X
                 ADCA    ,Y              ; A = A + byte from second number + carry
                 STA     ,U              ; store result
+
+                PULS    A
                 RTS
 
 ;       Name:           SUB24
@@ -216,6 +219,7 @@ ADD24:          ANDCC   #%11111110      ; clear carry
 ;               A,X,Y,U,CC
 ;
 SUB24:          ANDCC   #%11111110      ; clear carry
+                PSHS    A
 
                 LDA     2,X             ; get byte from first number
                 SBCA    2,Y             ; A = A - byte from second number - carry
@@ -228,6 +232,8 @@ SUB24:          ANDCC   #%11111110      ; clear carry
                 LDA     ,X             ; get byte from first number
                 SBCA    ,Y             ; A = A - byte from second number - carry
                 STA     ,U              ; store result
+
+                PULS    A
                 RTS
 
 
@@ -238,68 +244,58 @@ SUB24:          ANDCC   #%11111110      ; clear carry
 ;       Entry:
 ;
 ;            Register X = Pointer to 24-bit number 
-;            Register Y = Pointer to destination buffer of 8 bytes for ASCII string 
+;            Register Y = Pointer to preallocated destination buffer of 8 bytes for ASCII string 
 ;
 ;       Exit:
 ;            
 ;
 ; Stack:
 ;       24 bit temp (3 bytes): 0
-;       Count (1 byte)       : 3
-;       TablePtr   (2 bytes) : 4
-;       OutputPtr (2 bytes)  : 6
+;       OutputPtr (2 bytes)  : 3
 ;
 ;
-;
-CONV_INT24_STR: LEAS    -8,S            ; reserves space for copy of number
-                STY     6,S             ; saves ptr to output buffer
-                LDY     #table_exp10
-                STY     4,S 
-                LEAY    ,S
-                LDB     #3              ; prepares for copy
+CONV_INT24_STR: LEAS    -5,S            ; reserves stack space 
+                STY     3,S             ; saves ptr to output string
+                LDB     #0      
+loop0           LDA     #$30            ; fill output string with zeros
+                STA     A,Y
+                INCB
+                CMPB    #8
+                BNE     loop0
+
+                LEAY    ,S              ; local space for 24-bit number
+                LDB     #3              ; prepares for copying the 24-bit number
 loop1           LDA     ,X+             ; copy the value to convert
                 STA     ,Y+
                 DECB
                 BNE     loop1
 
-                LDB     #0              ; initialize local variables
-                STB     3,S
-                
-convdigit       LDB     #0              ; in B we will store the digit count
-                LEAX    ,S
-                LDY     4,S
-                LEAU    ,S
+                LDA     #0              ; ouput string index, from 0 to 7
+                LEAX    ,S              ; points to the local copy of the 24-bit number
+                LDY     #table_exp10    ; points to the entry of the table
+conv_digit      LDB     #0              ; in B we will store the digit count
+                TFR     X,U             ; output goes into the local copy of the 24-bit number
 sub1            JSR     SUB24           ; do a trial substraction
                 BCS     add_back        ; if it is negative, roll back the substraction
                 INCB                    
                 BRA     sub1
 
 add_back        JSR     ADD24
-                STB     [6,S]           ; convert to ascii
-                
-                LDA     #$30
-                ADDA    [6,S]
-                STA     [6,S]
+                LDU     3,S             ; start address of output string
+                ADDB    A,U             ; add count to zero in ascii
+                STB     A,U             ; stores ascii digit in its position
 
-                LDX     6,S             ; point to next output character
-                LEAX    1,X
-                STX     6,S
+                LEAY    3,Y             ; point to next table entry, skip next 24-bit number in the table
 
-                LDX     4,S             ; point to next output character
-                LEAX    3,X
-                STX     4,S
+                INCA                    ; inc output string inder
+                CMPA    #7              ; converts in total 8 digits
+                BNE     conv_digit
 
-                LDB     3,S             ; inc counter
-                INCB
-                STB     3,S
-                CMPB    #7              ; converts in total 8 digits
-                BNE     convdigit
-                
-                LDA     #$30            ; convert the unit
-                LEAX    ,S
-                ADDA    2,X
-                STA     [6,S]
-                LEAS    8,S
+                LDB     2,S             ; converts the unit     
+                ADDB    A,U             ; add count to zero in ascii
+                STB     A,U             ; stores ascii digit in its position
+
+                LEAS    5,S             ; restore stack
                 RTS
 
 ;
