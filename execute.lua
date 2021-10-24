@@ -1,2 +1,1 @@
-manager.machine.natkeyboard:post("LOADM\"EULER1\n")
-
+manager.machine.natkeyboard:post("LOADM\"EULER1.BIN\":EXEC\n")
